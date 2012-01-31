@@ -15,6 +15,7 @@ import java.io.FileNotFoundException;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -36,6 +37,8 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public class SnappedCounter implements IRichBolt {
   private static final transient Logger logger = Logger.getLogger(SnappedCounter.class);
+  
+  private AtomicInteger count = new AtomicInteger();
 
 
   // we flush and acknowledge pending tuples when we have either seen maxBufferedTuples tuples
@@ -109,7 +112,13 @@ public class SnappedCounter implements IRichBolt {
 
       // record all keys
       for (String keyValue : counts.elementSet()) {
-        outputCollector.emit(oldAckables, new Values(keyValue, counts.count(keyValue)));
+        final int n = counts.count(keyValue);
+        outputCollector.emit(oldAckables, new Values(keyValue, n));
+        count.addAndGet(n);
+      }
+
+      for (Tuple tuple : oldAckables) {
+        outputCollector.ack(tuple);
       }
       lastRecordOutput = currentRecordWindowStart;
     }
@@ -118,6 +127,7 @@ public class SnappedCounter implements IRichBolt {
   @Override
   public void cleanup() {
     recordCounts(true);
+    logger.warn(String.format("Total = %d\n", count.get()));
   }
 
   @Override

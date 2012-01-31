@@ -16,7 +16,7 @@ public class SnappedCounterTest {
     builder.setSpout("word", spout, 5);
     builder.setBolt("count", new SnappedCounter(100, 500), 3)
       .shuffleGrouping("word");
-    builder.setBolt("print", new FileBolt("foo-"))
+    builder.setBolt("print", new FileBolt("foo-"), 4)
       .allGrouping("count");
 
     Config conf = new Config();

@@ -25,7 +25,7 @@ public class FileBolt implements IBasicBolt{
 
   @Override
   public void prepare(Map conf, TopologyContext context) {
-    String outputName = base + context.getThisComponentId();
+    String outputName = base + context.getThisComponentId() + "-" + context.getThisTaskId();
     try {
       output = new PrintWriter(new FileOutputStream(outputName));
     } catch (FileNotFoundException e) {

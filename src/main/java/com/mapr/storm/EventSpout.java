@@ -13,21 +13,22 @@ import java.util.Map;
 import java.util.Random;
 
 /**
- * Created by IntelliJ IDEA. User: tdunning Date: 1/27/12 Time: 9:01 PM To change this template use
- * File | Settings | File Templates.
+ * Create test data.
  */
 public class EventSpout implements IRichSpout {
-  private static Logger LOG = Logger.getLogger(EventSpout.class);
+  private boolean isDistributed;
+  private SpoutOutputCollector collector;
+  private int n;
+  private int emitted = 0;
 
-  boolean isDistributed;
-  SpoutOutputCollector collector;
-
-  public EventSpout() {
+  public EventSpout(int n) {
     this(true);
+    this.n = n;
   }
 
   public EventSpout(boolean isDistributed) {
     this.isDistributed = isDistributed;
+    this.n = 1000;
   }
 
   public boolean isDistributed() {
@@ -39,7 +40,6 @@ public class EventSpout implements IRichSpout {
   }
 
   public void close() {
-
   }
 
   final String[] keys = new String[]{"z1", "z2", "z3", "z4", "z5"};
@@ -47,10 +47,14 @@ public class EventSpout implements IRichSpout {
   final Random rand = new Random();
 
   public void nextTuple() {
-    Utils.sleep(100);
-    final Values tuple = new Values(keys[rand.nextInt(keys.length)], words[rand.nextInt(words.length)]);
-    collector.emit(tuple);
-    collector.emit(new Values(keys[rand.nextInt(keys.length)], words[rand.nextInt(words.length)]));
+
+    if (emitted < n) {
+      Utils.sleep(1);
+      collector.emit(new Values(keys[rand.nextInt(keys.length)], words[rand.nextInt(words.length)]));
+      emitted++;
+    } else {
+      Utils.sleep(1000);
+    }
   }
 
   public void ack(Object msgId) {

@@ -7,31 +7,15 @@ import backtype.storm.topology.OutputFieldsDeclarer;
 import backtype.storm.tuple.Fields;
 import backtype.storm.tuple.Tuple;
 import backtype.storm.tuple.Values;
-import com.google.common.base.Charsets;
-import com.google.common.base.Splitter;
 import com.google.common.collect.HashMultiset;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.google.common.collect.Multiset;
-import com.google.common.io.Closeables;
-import com.google.common.io.Files;
-import com.google.common.io.LineReader;
 import org.apache.log4j.Logger;
-import sun.nio.ch.ChannelInputStream;
 
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.FilenameFilter;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * This Storm bolt counts things that it receives.  As items are received, they are also logged into
@@ -53,46 +37,33 @@ import java.util.Map;
 public class SnappedCounter implements IRichBolt {
   private static final transient Logger logger = Logger.getLogger(SnappedCounter.class);
 
-  // formats home, time, component into a log file name
-  private final String logFileNameFormat = "%1$s/%2$tY-%2$2tm-%2$td/%3$s-%2$tH-%2$tM-%2$tS.log";
-  private final String snapFileNameFormat = "%s/%s.snap";
-
-  private final long checkpointInterval = 10 * 1000;
-
-  private String home = "storm-aggregator-logs";
 
   // we flush and acknowledge pending tuples when we have either seen maxBufferedTuples tuples
   // when logFlushInterval ms have passed.
-  private final long logFlushInterval = 1 * 1000;
-  private int maxBufferedTuples = 100000;
+  private final long reportingInterval;
+  private int maxBufferedTuples;
 
-  private List<Tuple> ackables = Lists.newArrayList();
-
-  private transient FileChannel log;
-
-  private Map<String, Multiset<String>> counters = Maps.newHashMap();
+  // all pending tuples are kept with an atomic reference so we can atomically switch to a
+  // clean table
+  private AtomicReference<Set<Tuple>> ackables = new AtomicReference<Set<Tuple>>(new HashSet<Tuple>());
 
   private OutputCollector outputCollector;
-  private String componentId;
 
-  private long lastCheckpoint = 0;
-  private long lastFlush = 0;
-  private long lastRecord = 0;
-  private long reportingInterval = 300 * 1000;
+  // when did we last record output?
+  private long lastRecordOutput = 0;
 
-  public SnappedCounter(String home) throws FileNotFoundException {
-    this.home = home;
+  public SnappedCounter() throws FileNotFoundException {
+    this(10 * 1000, 100000);
   }
 
-  public SnappedCounter(String home, long reportingInterval) throws FileNotFoundException {
-    this(home);
+  public SnappedCounter(long reportingInterval, int maxBufferedTuples) throws FileNotFoundException {
     this.reportingInterval = reportingInterval;
+    this.maxBufferedTuples = maxBufferedTuples;
   }
 
   @Override
   public void prepare(Map map, TopologyContext topologyContext, OutputCollector outputCollector) {
     this.outputCollector = outputCollector;
-    this.componentId = topologyContext.getThisComponentId();
   }
 
   /**
@@ -103,189 +74,54 @@ public class SnappedCounter implements IRichBolt {
    */
   @Override
   public void execute(Tuple tuple) {
-    String key = tuple.getString(0);
-    String value = tuple.getString(1);
-    count(key, value);
-    ackables.add(tuple);
-    logItem(key, value);
-    checkpoint(false);
-    recordCounts();
+    ackables.get().add(tuple);
+    recordCounts(false);
   }
 
   /**
-   * Records and then clears all pending counts
+   * Records and then clears all pending counts if we have crossed a window boundary
+   * or have a bunch of data accumulated.
+   * @param force  If true, then windows and such are ignored and the data is pushed out regardless
    */
-  private void recordCounts() {
-    long currentRecord = (System.currentTimeMillis() / reportingInterval) * reportingInterval;
-    if (lastRecord == 0) {
-      lastRecord = currentRecord;
+  private void recordCounts(boolean force) {
+    long currentRecordWindowStart = (System.currentTimeMillis() / reportingInterval) * reportingInterval;
+    if (lastRecordOutput == 0) {
+      lastRecordOutput = currentRecordWindowStart;
     }
 
-    if (currentRecord - lastRecord > reportingInterval) {
-      // flush log and snapshot
-      checkpoint(true);
+    final int bufferedTuples = ackables.get().size();
+    if (force || currentRecordWindowStart - lastRecordOutput > reportingInterval || bufferedTuples > maxBufferedTuples) {
+      if (force) {
+        logger.info("Forced recording");
+      } else if (bufferedTuples > maxBufferedTuples) {
+        logger.info("Recording due to max tuples");
+      } else {
+        logger.info("Recording due to time");
+      }
+
+      // atomic get and set avoids the need to locks and still avoids races
+      Set<Tuple> oldAckables = ackables.getAndSet(new HashSet<Tuple>());
+
+      Multiset<String> counts = HashMultiset.create();
+      for (Tuple tuple : oldAckables) {
+        counts.add(tuple.getString(0) + "\t" + tuple.getString(1));
+      }
+
       // record all keys
-      for (String key : counters.keySet()) {
-        final Multiset<String> table = counters.get(key);
-        for (String value : table.elementSet()) {
-          outputCollector.emit(new Values(lastRecord, key, value, table.count(value)));
-        }
-        lastRecord = currentRecord;
+      for (String keyValue : counts.elementSet()) {
+        outputCollector.emit(oldAckables, new Values(keyValue, counts.count(keyValue)));
       }
-      // nuke everything even though we will most likely just rebuild it
-      counters.clear();
-    }
-  }
-
-  /**
-   * Counts a particular key/value
-   *
-   * @param key
-   * @param value
-   */
-  private void count(String key, String value) {
-    Multiset<String> table = counters.get(key);
-    if (table == null) {
-      table = HashMultiset.create();
-      counters.put(key, table);
-    }
-    table.add(value);
-  }
-
-  /**
-   * Logs a key/value.
-   *
-   * @param key   The kind of item
-   * @param value Which item
-   */
-  private void logItem(String key, String value) {
-    ByteBuffer out = ByteBuffer.allocate(10000);
-    out.put(key.getBytes(Charsets.UTF_8));
-    out.put((byte) '\t');
-    out.put(value.getBytes(Charsets.UTF_8));
-    out.put((byte) '\n');
-    try {
-      if (log == null) {
-        new File(getLogFileName()).getParentFile().mkdirs();
-        log = new FileOutputStream(getLogFileName(), true).getChannel();
-      }
-      out.flip();
-      log.write(out);
-      final long currentFlush = elapsedMilliSeconds();
-      if (currentFlush - lastFlush > logFlushInterval || ackables.size() > maxBufferedTuples) {
-        lastFlush = currentFlush;
-        flushLog();
-      }
-    } catch (IOException e) {
-      throw new RuntimeException("IO error in log write", e);
-    }
-  }
-
-  /**
-   * Record the current point in the log
-   *
-   * @param force Set to true to force checkpoint to be written and log flushed right now.
-   */
-  private void checkpoint(boolean force) {
-    long currentCheckpoint = elapsedMilliSeconds();
-    if (force || currentCheckpoint - lastCheckpoint > checkpointInterval) {
-      lastCheckpoint = currentCheckpoint;
-      File snap = snapFile();
-      snap.getParentFile().mkdirs();
-      try {
-        Files.write(getLogFileName() + "\t" + currentLogFileOffset(), snap, Charsets.UTF_8);
-        flushLog();
-      } catch (IOException e) {
-        throw new RuntimeException("IO error while snapping", e);
-      }
-    }
-  }
-
-  /**
-   * Flush the log and acknowledge all pending tuples.  The idea is that we don't want to
-   * acknowledge tuples until we are sure they are on disk but we also don't want to force them to
-   * disk too often.
-   *
-   * @throws IOException
-   */
-  private void flushLog() throws IOException {
-    for (Tuple tuple : ackables) {
-      outputCollector.ack(tuple);
-    }
-    log.force(true);
-  }
-
-  public void replayLog() {
-    File snap = snapFile();
-    if (snap.exists()) {
-      try {
-        String snapState = Files.readFirstLine(snap, Charsets.UTF_8);
-        Iterator<String> pieces = Splitter.on("\t").split(snapState).iterator();
-        final String firstLog = pieces.next();
-        long offset = Long.parseLong(pieces.next());
-        List<File> files = Lists.newArrayList(new File(getLogFileName()).getParentFile().listFiles(new FilenameFilter() {
-          @Override
-          public boolean accept(File file, String name) {
-            return name.compareTo(firstLog) >= 0;
-          }
-        }));
-        Collections.sort(files);
-
-        final Splitter onTabs = Splitter.on('\t');
-        for (File file : files) {
-          FileChannel in = null;
-          try {
-            in = new FileInputStream(file).getChannel();
-            in.position(offset);
-            offset = 0;
-            LineReader input = new LineReader(new InputStreamReader(new ChannelInputStream(in)));
-            String line = input.readLine();
-            while (line != null) {
-              pieces = onTabs.split(line).iterator();
-              String key = pieces.next();
-              count(key, pieces.next());
-            }
-          } catch (IOException e) {
-            logger.warn("Error replaying log, log file " + file + " partially dropped", e);
-          } finally {
-            if (in != null) {
-              Closeables.closeQuietly(in);
-            }
-          }
-        }
-      } catch (IOException e) {
-        logger.warn("Error trying to read snapshot file", e);
-      }
+      lastRecordOutput = currentRecordWindowStart;
     }
   }
 
   @Override
   public void cleanup() {
-    checkpoint(true);
+    recordCounts(true);
   }
 
   @Override
   public void declareOutputFields(OutputFieldsDeclarer declarer) {
-    declarer.declare(new Fields("a", "b"));
-  }
-
-  public String getLogFileName() {
-    return String.format(logFileNameFormat, home, (System.currentTimeMillis() / checkpointInterval) * checkpointInterval, componentId);
-  }
-
-  public void setHome(String home) {
-    this.home = home;
-  }
-
-  private File snapFile() {
-    return new File(String.format(snapFileNameFormat, home, System.currentTimeMillis()));
-  }
-
-  private long currentLogFileOffset() throws IOException {
-    return log.position();
-  }
-
-  private long elapsedMilliSeconds() {
-    return System.nanoTime() / 1000000;
+    declarer.declare(new Fields("keyValue", "count"));
   }
 }

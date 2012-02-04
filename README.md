@@ -9,8 +9,11 @@ them.
 
 Note the use of tuple acking to avoid any sort of retry log in the counter.
 
+#### Beta Bayesian Bandit Model
 The BanditTrainer shows how a two-armed bandit can be solved using a model that I call the
 beta-Bayesian model.
 
+#### Beta Distributed Random Walk
+
 The BetaWalk implements a random walk that has assymptotic beta distribution.  This is useful for
-modeling conversion probabilities that vary in time.
+modeling conversion probabilities that vary in time but which have realistic distribution.

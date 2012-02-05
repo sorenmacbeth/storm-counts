@@ -11,10 +11,11 @@ import com.google.common.collect.HashMultiset;
 import com.google.common.collect.Multiset;
 import org.apache.log4j.Logger;
 
-import java.io.FileNotFoundException;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -35,8 +36,8 @@ import java.util.concurrent.atomic.AtomicReference;
  * snapshot may refer to a log that is not the latest.  If so, we need to read all logs up to the
  * latest in addition to the log specified in the snapshot.
  */
-public class SnappedCounter implements IRichBolt {
-  private static final transient Logger logger = Logger.getLogger(SnappedCounter.class);
+public class CounterBolt implements IRichBolt {
+  private static final transient Logger logger = Logger.getLogger(CounterBolt.class);
   
   private AtomicInteger count = new AtomicInteger();
 
@@ -48,18 +49,19 @@ public class SnappedCounter implements IRichBolt {
 
   // all pending tuples are kept with an atomic reference so we can atomically switch to a
   // clean table
-  private AtomicReference<Set<Tuple>> ackables = new AtomicReference<Set<Tuple>>(new HashSet<Tuple>());
+  private AtomicReference<Set<Tuple>> ackables = new AtomicReference<Set<Tuple>>(
+    Collections.newSetFromMap(new ConcurrentHashMap<Tuple, Boolean>()));
 
   private OutputCollector outputCollector;
 
   // when did we last record output?
   private long lastRecordOutput = 0;
 
-  public SnappedCounter() throws FileNotFoundException {
+  public CounterBolt() {
     this(10 * 1000, 100000);
   }
 
-  public SnappedCounter(long reportingInterval, int maxBufferedTuples) throws FileNotFoundException {
+  public CounterBolt(long reportingInterval, int maxBufferedTuples) {
     this.reportingInterval = reportingInterval;
     this.maxBufferedTuples = maxBufferedTuples;
   }
@@ -83,7 +85,7 @@ public class SnappedCounter implements IRichBolt {
 
   /**
    * Records and then clears all pending counts if we have crossed a window boundary
-   * or have a bunch of data accumulated.
+   * or have a bunch of data accumulated or if forced.
    * @param force  If true, then windows and such are ignored and the data is pushed out regardless
    */
   private void recordCounts(boolean force) {
@@ -115,6 +117,7 @@ public class SnappedCounter implements IRichBolt {
         final int n = counts.count(keyValue);
         outputCollector.emit(oldAckables, new Values(keyValue, n));
         count.addAndGet(n);
+        logger.info(String.format("Logged %d events", count.get()));
       }
 
       for (Tuple tuple : oldAckables) {
@@ -127,7 +130,7 @@ public class SnappedCounter implements IRichBolt {
   @Override
   public void cleanup() {
     recordCounts(true);
-    logger.warn(String.format("Total = %d\n", count.get()));
+    logger.warn(String.format("Shutting down.  Total events logged = %d\n", count.get()));
   }
 
   @Override

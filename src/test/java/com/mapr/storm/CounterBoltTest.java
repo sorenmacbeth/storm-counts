@@ -7,14 +7,14 @@ import org.junit.Test;
 
 import java.io.FileNotFoundException;
 
-public class SnappedCounterTest {
+public class CounterBoltTest {
   @Test
   public void testShort() throws FileNotFoundException, InterruptedException {
     TopologyBuilder builder = new TopologyBuilder();
 
     final EventSpout spout = new EventSpout(100);
     builder.setSpout("word", spout, 5);
-    builder.setBolt("count", new SnappedCounter(100, 500), 3)
+    builder.setBolt("count", new CounterBolt(100, 500), 3)
       .shuffleGrouping("word");
     builder.setBolt("print", new FileBolt("foo-"), 4)
       .allGrouping("count");

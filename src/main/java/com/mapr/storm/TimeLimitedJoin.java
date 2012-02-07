@@ -38,7 +38,7 @@ public class TimeLimitedJoin implements IRichBolt {
       return System.nanoTime() / 1000000;
     }
   };
-
+  
   public TimeLimitedJoin(long expirationTime, int maxTuplesToRetain, Fields joinKey) {
     this.expirationTime = expirationTime;
     this.maxTuplesToRetain = maxTuplesToRetain;
@@ -59,19 +59,27 @@ public class TimeLimitedJoin implements IRichBolt {
       TimedTuple expiringTuple = queue.poll();
       if (expiringTuple.tuple != null) {
         collector.ack(expiringTuple.tuple);
+        Key key = extractJoinKey(input);
+        if (pendingByKey.get(key).time < cutoff) {
+          pendingByKey.remove(key);
+        }
       }
     }
 
     final Key key = extractJoinKey(input);
     TimedTuple match = pendingByKey.get(key);
     if (match != null) {
-      pendingByKey.remove(key);
-      collector.emit(Arrays.asList(input, match.tuple), ImmutableList.of(match, input));
-      collector.ack(input);
-      collector.ack(match.tuple);
-      match.tuple = null;
+      if (match.tuple != null) {
+        pendingByKey.remove(key);
+        collector.emit(Arrays.asList(input, match.tuple), ImmutableList.of(Lists.newArrayList(key), match.tuple, input));
+        collector.ack(input);
+        collector.ack(match.tuple);
+        match.tuple = null;
+      }
     } else {
-      queue.add(new TimedTuple(clock.now(), input));
+      final TimedTuple t = new TimedTuple(clock.now(), input);
+      queue.add(t);
+      pendingByKey.put(key, t);
     }
   }
 
@@ -84,7 +92,7 @@ public class TimeLimitedJoin implements IRichBolt {
   }
 
   /**
-   * Current absolute time in millis, but not sensitive to clock changes.
+   * Current absolute time in millis according to whatever clock we currently have.
    */
   private long now() {
     return clock.now();
@@ -113,7 +121,7 @@ public class TimeLimitedJoin implements IRichBolt {
     public long now();
   }
 
-  private static class Key {
+  private static class Key implements Iterable<Object>{
     List<Object> values;
 
     private Key(List<Object> values) {
@@ -156,6 +164,11 @@ public class TimeLimitedJoin implements IRichBolt {
         hash = hash ^ value.hashCode();
       }
       return hash;
+    }
+
+    @Override
+    public Iterator<Object> iterator() {
+      return values.iterator();
     }
   }
 

@@ -32,8 +32,8 @@ public class BetaDistribution extends AbstractContinousDistribution {
    */
   @Override
   public double nextDouble() {
-    double x = gAlpha.nextDouble();
-    double y = gBeta.nextDouble();
+    double x = gAlpha.nextDouble(alpha, 1);
+    double y = gBeta.nextDouble(beta, 1);
     return x / (x + y);
   }
 

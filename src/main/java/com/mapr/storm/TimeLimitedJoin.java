@@ -32,13 +32,6 @@ public class TimeLimitedJoin implements IRichBolt {
   private Queue<TimedTuple> queue = new LinkedList<TimedTuple>();
   private Map<Key, TimedTuple> pendingByKey = Maps.newHashMap();
 
-  private Clock clock = new Clock() {
-    @Override
-    public long now() {
-      return System.nanoTime() / 1000000;
-    }
-  };
-  
   public TimeLimitedJoin(long expirationTime, int maxTuplesToRetain, Fields joinKey) {
     this.expirationTime = expirationTime;
     this.maxTuplesToRetain = maxTuplesToRetain;
@@ -77,7 +70,7 @@ public class TimeLimitedJoin implements IRichBolt {
         match.tuple = null;
       }
     } else {
-      final TimedTuple t = new TimedTuple(clock.now(), input);
+      final TimedTuple t = new TimedTuple(now(), input);
       queue.add(t);
       pendingByKey.put(key, t);
     }
@@ -95,7 +88,7 @@ public class TimeLimitedJoin implements IRichBolt {
    * Current absolute time in millis according to whatever clock we currently have.
    */
   private long now() {
-    return clock.now();
+    return System.nanoTime() / 1000000;
   }
 
   @Override
@@ -106,19 +99,6 @@ public class TimeLimitedJoin implements IRichBolt {
   @Override
   public void declareOutputFields(OutputFieldsDeclarer declarer) {
     declarer.declare(new Fields("old", "new"));
-  }
-
-  /**
-   * Allows injection of an alternative clock for testing purposes.
-   *
-   * @param clock  The clock to use for expiration.
-   */
-  public void setClock(Clock clock) {
-    this.clock = clock;
-  }
-
-  public static interface Clock {
-    public long now();
   }
 
   private static class Key implements Iterable<Object>{

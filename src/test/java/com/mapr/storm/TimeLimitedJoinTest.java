@@ -6,7 +6,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
 import org.junit.Test;
 
-import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -18,8 +17,7 @@ public class TimeLimitedJoinTest {
   @Test
   public void testJoinWithExpiration() throws InterruptedException {
     TimeLimitedJoin tlj = new TimeLimitedJoin(1000, 100, new Fields("key1", "key2"));
-    final FakeClock clock = new FakeClock();
-    tlj.setClock(clock);
+    final Fake.Clock clock = Fake.clock();
 
     List<Fake.AnchoredTuple> out = new ArrayList<Fake.AnchoredTuple>();
     Set<Tuple> acks = Sets.newHashSet();
@@ -58,8 +56,7 @@ public class TimeLimitedJoinTest {
   @Test
   public void testJoinWithResurrection() throws InterruptedException {
     TimeLimitedJoin tlj = new TimeLimitedJoin(1000, 100, new Fields("key1", "key2"));
-    final FakeClock clock = new FakeClock();
-    tlj.setClock(clock);
+    Fake.Clock clock = Fake.clock();
 
     List<Fake.AnchoredTuple> out = new ArrayList<Fake.AnchoredTuple>();
     Set<Tuple> acks = Sets.newHashSet();
@@ -102,15 +99,4 @@ public class TimeLimitedJoinTest {
     assertEquals(0, failures.size());
   }
 
-  private static class FakeClock implements TimeLimitedJoin.Clock, Serializable {
-    long time;
-    @Override
-    public long now() {
-      return time;
-    }
-    
-    public void advance(long delta) {
-      time += delta;
-    }
-  }
 }

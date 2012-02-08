@@ -18,6 +18,10 @@ import java.util.Set;
  * Factory methods for mocked objects including Tuples.
  */
 public class Fake {
+
+  static long[] time = {1235L};
+  static Clock adjuster = new Clock();
+
   /**
    * Mocks up a tuple that has specially injected data.
    *
@@ -159,6 +163,25 @@ public class Fake {
 
     public List<Object> getTuple() {
       return tuple;
+    }
+  }
+
+  public static Clock clock() {
+    new MockUp<System>() {
+      @Mock
+      public long nanoTime() {
+        return time[0] * 1000000;
+      }
+    };
+    return adjuster;
+  }
+
+  public static class Clock {
+    public Clock() {
+    }
+
+    public void advance(long delta) {
+      time[0] += delta;
     }
   }
 }

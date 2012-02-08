@@ -11,11 +11,9 @@ import com.google.common.collect.HashMultiset;
 import com.google.common.collect.Multiset;
 import org.apache.log4j.Logger;
 
-import java.util.Collections;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Queue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -49,8 +47,7 @@ public class CounterBolt implements IRichBolt {
 
   // all pending tuples are kept with an atomic reference so we can atomically switch to a
   // clean table
-  private AtomicReference<Set<Tuple>> ackables = new AtomicReference<Set<Tuple>>(
-    Collections.newSetFromMap(new ConcurrentHashMap<Tuple, Boolean>()));
+  private AtomicReference<Queue<Tuple>> tupleLog = new AtomicReference<Queue<Tuple>>(new LinkedBlockingQueue<Tuple>());
 
   private OutputCollector outputCollector;
 
@@ -79,7 +76,7 @@ public class CounterBolt implements IRichBolt {
    */
   @Override
   public void execute(Tuple tuple) {
-    ackables.get().add(tuple);
+    tupleLog.get().add(tuple);
     recordCounts(false);
   }
 
@@ -89,13 +86,13 @@ public class CounterBolt implements IRichBolt {
    * @param force  If true, then windows and such are ignored and the data is pushed out regardless
    */
   private void recordCounts(boolean force) {
-    long currentRecordWindowStart = (System.currentTimeMillis() / reportingInterval) * reportingInterval;
+    long currentRecordWindowStart = (now() / reportingInterval) * reportingInterval;
     if (lastRecordOutput == 0) {
       lastRecordOutput = currentRecordWindowStart;
     }
 
-    final int bufferedTuples = ackables.get().size();
-    if (force || currentRecordWindowStart - lastRecordOutput > reportingInterval || bufferedTuples > maxBufferedTuples) {
+    final int bufferedTuples = tupleLog.get().size();
+    if (force || currentRecordWindowStart > lastRecordOutput || bufferedTuples > maxBufferedTuples) {
       if (force) {
         logger.info("Forced recording");
       } else if (bufferedTuples > maxBufferedTuples) {
@@ -105,26 +102,31 @@ public class CounterBolt implements IRichBolt {
       }
 
       // atomic get and set avoids the need to locks and still avoids races
-      Set<Tuple> oldAckables = ackables.getAndSet(new HashSet<Tuple>());
+      // grabbing the entire queue at once avoids contention as we count the queue elements
+      Queue<Tuple> oldLog = tupleLog.getAndSet(new LinkedBlockingQueue<Tuple>());
 
       Multiset<String> counts = HashMultiset.create();
-      for (Tuple tuple : oldAckables) {
+      for (Tuple tuple : oldLog) {
         counts.add(tuple.getString(0) + "\t" + tuple.getString(1));
       }
 
       // record all keys
       for (String keyValue : counts.elementSet()) {
         final int n = counts.count(keyValue);
-        outputCollector.emit(oldAckables, new Values(keyValue, n));
+        outputCollector.emit(oldLog, new Values(keyValue, n));
         count.addAndGet(n);
-        logger.info(String.format("Logged %d events", count.get()));
       }
+      logger.info(String.format("Logged %d events", count.get()));
 
-      for (Tuple tuple : oldAckables) {
+      for (Tuple tuple : oldLog) {
         outputCollector.ack(tuple);
       }
       lastRecordOutput = currentRecordWindowStart;
     }
+  }
+
+  private long now() {
+    return System.nanoTime() / 1000000;
   }
 
   @Override
@@ -136,5 +138,9 @@ public class CounterBolt implements IRichBolt {
   @Override
   public void declareOutputFields(OutputFieldsDeclarer declarer) {
     declarer.declare(new Fields("keyValue", "count"));
+  }
+
+  public int getTotal() {
+    return count.get();
   }
 }

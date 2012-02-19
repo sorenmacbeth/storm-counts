@@ -33,20 +33,37 @@ public class BetaBayesModel {
   Random gen = new MersenneTwisterRNG();
 
   // we have one beta distribution for each bandit
-  BetaDistribution[] b = {
-    new BetaDistribution(1, 1, gen),
-    new BetaDistribution(1, 1, gen)
-  };
-  private final double rate = 1;
+  List<BetaDistribution> b = Lists.newArrayList();
+  private final double rate;
+
+  public BetaBayesModel() {
+    this(2, 1);
+  }
+
+  public BetaBayesModel(int bandits, double rate) {
+    this.rate = rate;
+    for (int i = 0; i < bandits; i++) {
+      b.add(new BetaDistribution(1, 1, gen));
+    }
+  }
 
   /**
    * Samples probability estimates from each bandit and picks the apparent best
    * @return 0 or 1 according to which bandit seems better
    */
-  int sample(){
-    double p1 = b[0].nextDouble();
-    double p2 = b[1].nextDouble();
-    return p1 > p2 ? 0 : 1;
+  int sample() {
+    double max = 0;
+    int r = 0;
+    int i = 0;
+    for (BetaDistribution dist : b) {
+      double p = dist.nextDouble();
+      if (p > max) {
+        r = i;
+        max = p;
+      }
+      i++;
+    }
+    return r;
   }
 
   /**
@@ -56,17 +73,17 @@ public class BetaBayesModel {
    */
   void train(int bandit, boolean success) {
     if (success) {
-      b[bandit].setAlpha(b[bandit].getAlpha() + rate);
+      b.get(bandit).setAlpha(b.get(bandit).getAlpha() + rate);
     } else {
-      b[bandit].setBeta(b[bandit].getBeta() + rate);
+      b.get(bandit).setBeta(b.get(bandit).getBeta() + rate);
     }
   }
 
   @Override
   public String toString() {
     return String.format("%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f",
-      b[0].mean(), b[1].mean(),
-      b[0].getAlpha(), b[0].getBeta(),
-      b[1].getAlpha(), b[1].getBeta());
+      b.get(0).mean(), b.get(1).mean(),
+      b.get(0).getAlpha(), b.get(0).getBeta(),
+      b.get(1).getAlpha(), b.get(1).getBeta());
   }
 }

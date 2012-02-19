@@ -26,7 +26,7 @@ import static org.junit.Assert.assertEquals;
 public class DistributionTest {
   protected void checkDistribution(AbstractContinousDistribution d, String test, double epsilon) {
     // pull a bunch of samples
-    int n = 100001;
+    int n = 40001;
     double[] s = new double[n];
     for (int i = 0; i < n; i++) {
       s[i] = d.nextDouble();

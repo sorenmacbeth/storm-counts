@@ -54,6 +54,12 @@ public class BetaDistribution extends AbstractContinousDistribution {
     return x / (x + y);
   }
 
+  public double nextDouble(double alpha, double beta) {
+    double x = gAlpha.nextDouble(alpha, 1);
+    double y = gBeta.nextDouble(beta, 1);
+    return x / (x + y);
+  }
+
   @Override
   public double pdf(double x) {
     return Math.pow(x, alpha - 1) * Math.pow(1 - x, beta - 1) / org.apache.mahout.math.jet.stat.Gamma.beta(alpha, beta);

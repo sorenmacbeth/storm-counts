@@ -48,11 +48,13 @@ import java.util.Random;
 public class BanditTrainer {
   public static void main(String[] args) throws FileNotFoundException {
     System.out.printf("regret\n");
-    averageRegret("regret.tsv");
+    averageRegret("regret-100.tsv", new int[]{20, 50, 100, 200, 500, 1000, 2000}, 1000, 100);
+    averageRegret("regret-20.tsv", new int[]{20, 50, 100, 200, 500, 1000, 2000, 5000}, 1000, 20);
+    averageRegret("regret.tsv", new int[]{20, 50, 100, 200, 500, 1000, 2000, 5000}, 10000, 2);
     System.out.printf("error rates\n");
     errorRate("errors.tsv");
     System.out.printf("commit time\n");
-    commitTime("commit.tsv", 3000, 0.1, 0.12);
+    commitTime("commit.tsv", 3000, 0.1, 0.12, 2000);
     System.out.printf("done\n");
   }
 
@@ -63,17 +65,21 @@ public class BanditTrainer {
    * <pre>
    *    plot(tapply(z$k, floor(z$i/10), mean), type='l')
    * </pre>
+   *
    * @param outputFile
    * @param n
    * @param p1
    * @param p2
+   * @param cutoff
    * @throws FileNotFoundException
    */
-  private static void commitTime(String outputFile, int n, double p1, double p2) throws FileNotFoundException {
+  public static double commitTime(String outputFile, int n, double p1, double p2, int cutoff) throws FileNotFoundException {
     PrintWriter out = new PrintWriter(outputFile);
     try {
       Random gen = new Random();
       out.printf("i\tk\n");
+      int impressions = 0;
+      int correct = 0;
       for (int j = 0; j < 1000; j++) {
         // pick probabilities at random
         double[] p = {
@@ -85,13 +91,17 @@ public class BanditTrainer {
           int k = s.sample();
           out.printf("%d\t%d\n", i, k);
 
+          if (i > cutoff) {
+            impressions++;
+            correct += k;
+          }
+
           final double u = gen.nextDouble();
           boolean r = u <= p[k];
-          if (i > n / 2) {
-          }
           s.train(k, r);
         }
       }
+      return (double) correct / impressions;
     } finally {
       out.close();
     }
@@ -106,6 +116,7 @@ public class BanditTrainer {
    *
    * @param outputFile  Where to write the data.
    */
+  @Deprecated
   private static void errorRate(String outputFile) throws FileNotFoundException {
     PrintWriter out = new PrintWriter(outputFile);
     try {
@@ -151,27 +162,37 @@ public class BanditTrainer {
    * > x=read.delim(file='~/Apache/storm-aggregator/regret.tsv')
    * > bxp(list(stats=t(as.matrix(x[,2:6])), n=rep(1000,times=8),names=x$n))
    * </pre>
+   *
    * @param outputFile  Where to put the output
+   * @param sizes
+   * @param replications
+   * @param bandits
    * @throws FileNotFoundException If the output file can't be opened due to a missing directory.
    */
-  private static void averageRegret(String outputFile) throws FileNotFoundException {
+  public static double averageRegret(String outputFile, int[] sizes, int replications, int bandits) throws FileNotFoundException {
+    double rate = 1;
+
     PrintWriter out = new PrintWriter(outputFile);
     try {
+      double finalMedianRegret = 0;
       Random gen = new Random();
       out.printf("n\tq0\tq1\tq2\tq3\tq4\n");
       // for each horizon time span of interest
-      for (int n : new int[]{20, 50, 100, 200, 500, 1000, 2000, 5000}) {
+      for (int n : sizes) {
         System.out.printf("%d\n", n);
         OnlineSummarizer summary = new OnlineSummarizer();
         // replicate the test many times
-        for (int j = 0; j < 10000; j++) {
+        for (int j = 0; j < replications; j++) {
           // pick probabilities at random
-          double[] p = {
-            gen.nextDouble(), gen.nextDouble()
-          };
+          
+          double[] p = new double[bandits];
+          for (int k = 0; k < bandits; k++) {
+            p[k] = gen.nextDouble();
+          }
+
           // order them to make error interpretation easier
           Arrays.sort(p);
-          BetaBayesModel s = new BetaBayesModel();
+          BetaBayesModel s = new BetaBayesModel(bandits, rate);
           int wins = 0;
           for (int i = 0; i < n; i++) {
             int k = s.sample();
@@ -180,14 +201,18 @@ public class BanditTrainer {
             wins += r ? 1 : 0;
             s.train(k, r);
           }
-          summary.add((double) wins / n - Math.max(p[0], p[1]));
+          summary.add((double) wins / n - p[bandits - 1]);
         }
         out.printf("%d\t", n);
         for (int quartile = 0; quartile <= 4; quartile++) {
           out.printf("%.3f%s", summary.getQuartile(quartile), quartile < 4 ? "\t" : "\n");
         }
+        out.flush();
+        finalMedianRegret = summary.getMedian();
+
         //      System.out.printf("%.3f\n", summary.getMean());
       }
+      return finalMedianRegret;
     } finally {
       out.close();
     }

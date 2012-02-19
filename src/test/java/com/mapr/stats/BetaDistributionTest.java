@@ -59,7 +59,10 @@ public class BetaDistributionTest extends DistributionTest {
   @Test
   public void testSampleDistribution1() {
     checkDistribution(new BetaDistribution(1, 1), String.format("alpha = %.1f, beta = %.1f", 1.0, 1.0), 1e-2);
-    checkDistribution(new BetaDistribution(2, 3), String.format("alpha = %.1f, beta = %.1f", 2.0, 3.0), 1e-2);
+    final BetaDistribution bd = new BetaDistribution(1, 1);
+    bd.setAlpha(2);
+    bd.setBeta(3);
+    checkDistribution(bd, String.format("alpha = %.1f, beta = %.1f", 2.0, 3.0), 1e-2);
     checkDistribution(new BetaDistribution(0.6, 20.0), String.format("alpha = %.1f, beta = %.1f", 0.6, 20.0), 1e-2);
   }
 }

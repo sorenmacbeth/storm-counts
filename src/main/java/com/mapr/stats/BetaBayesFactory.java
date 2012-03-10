@@ -17,24 +17,15 @@
 
 package com.mapr.stats;
 
-import org.uncommons.maths.random.MersenneTwisterRNG;
-
 import java.util.Random;
 
 /**
- * Multi-armed bandit problem where each probability is modeled by a beta prior and data about
- * positive and negative trials.  An arm is selected by sampling from the current posterior
- * for each arm and picking the one with higher sampled probability.
+ * Factory that creates a BetaBayesModel for solving a
+ * multi-armed bandit with binary {0,1} rewards.
  */
-public class BetaBayesModel extends BayesianBandit {
-
-  public BetaBayesModel() {
-    this(2, new MersenneTwisterRNG());
-  }
-
-  public BetaBayesModel(int bandits, Random gen) {
-    for (int i = 0; i < bandits; i++) {
-      addModelDistribution(new BetaBinomialDistribution(1, 1, gen));
-    }
+class BetaBayesFactory extends BanditFactory {
+  @Override
+  public BayesianBandit createBandit(int bandits, Random gen) {
+    return new BetaBayesModel(bandits, gen);
   }
 }

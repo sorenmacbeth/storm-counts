@@ -29,10 +29,10 @@ import org.apache.mahout.math.function.VectorFunction;
  * Solves the contextual bandit problem using Bayesian sampling.
  */
 public class ContextualBayesBandit {
-  private Matrix featureMap;
-  private Matrix state;
+  private final Matrix featureMap;
+  private final Matrix state;
   private final int m;
-  private BetaDistribution rand;
+  private final BetaDistribution rand;
 
   public ContextualBayesBandit(Matrix featureMap) {
     this(featureMap, 1, 1);
@@ -58,7 +58,7 @@ public class ContextualBayesBandit {
 
   private Vector sampleNoLink() {
     final Vector theta = state.aggregateRows(new VectorFunction() {
-      DoubleFunction inverseLink = new InverseLogisticFunction();
+      final DoubleFunction inverseLink = new InverseLogisticFunction();
 
       @Override
       public double apply(Vector f) {

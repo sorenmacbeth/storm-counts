@@ -24,7 +24,6 @@ import backtype.storm.topology.OutputFieldsDeclarer;
 import backtype.storm.tuple.Fields;
 import backtype.storm.tuple.Values;
 import backtype.storm.utils.Utils;
-import org.apache.log4j.Logger;
 
 import java.util.Map;
 import java.util.Random;
@@ -33,7 +32,7 @@ import java.util.Random;
  * Create test data.
  */
 public class EventSpout implements IRichSpout {
-  private boolean isDistributed;
+  private final boolean isDistributed;
   private SpoutOutputCollector collector;
   private int n;
   private int emitted = 0;
@@ -59,9 +58,9 @@ public class EventSpout implements IRichSpout {
   public void close() {
   }
 
-  final String[] keys = new String[]{"z1", "z2", "z3", "z4", "z5"};
-  final String[] words = new String[]{"nathan", "mike", "jackson", "golda", "bertels"};
-  final Random rand = new Random();
+  private final String[] keys = new String[]{"z1", "z2", "z3", "z4", "z5"};
+  private final String[] words = new String[]{"nathan", "mike", "jackson", "golda", "bertels"};
+  private final Random rand = new Random();
 
   public void nextTuple() {
 

@@ -17,24 +17,31 @@
 
 package com.mapr.stats;
 
-import org.uncommons.maths.random.MersenneTwisterRNG;
-
-import java.util.Random;
+import org.apache.mahout.math.jet.random.AbstractContinousDistribution;
 
 /**
- * Multi-armed bandit problem where each probability is modeled by a beta prior and data about
- * positive and negative trials.  An arm is selected by sampling from the current posterior
- * for each arm and picking the one with higher sampled probability.
+ * Represents a distribution that knows it's own mean.
  */
-public class BetaBayesModel extends BayesianBandit {
+public class DistributionWithMean extends AbstractContinousDistribution implements Comparable<DistributionWithMean> {
+  private AbstractContinousDistribution delegate;
+  private double mean;
 
-  public BetaBayesModel() {
-    this(2, new MersenneTwisterRNG());
+  public DistributionWithMean(AbstractContinousDistribution delegate, double mean) {
+    this.delegate = delegate;
+    this.mean = mean;
   }
 
-  public BetaBayesModel(int bandits, Random gen) {
-    for (int i = 0; i < bandits; i++) {
-      addModelDistribution(new BetaBinomialDistribution(1, 1, gen));
-    }
+  public double getMean() {
+    return mean;
+  }
+
+  @Override
+  public double nextDouble() {
+    return delegate.nextDouble();
+  }
+
+  @Override
+  public int compareTo(DistributionWithMean other) {
+    return Double.compare(getMean(), other.getMean());
   }
 }

@@ -54,17 +54,17 @@ import java.util.concurrent.atomic.AtomicReference;
 public class CounterBolt implements IRichBolt {
   private static final transient Logger logger = Logger.getLogger(CounterBolt.class);
   
-  private AtomicInteger count = new AtomicInteger();
+  private final AtomicInteger count = new AtomicInteger();
 
 
   // we flush and acknowledge pending tuples when we have either seen maxBufferedTuples tuples
   // when logFlushInterval ms have passed.
   private final long reportingInterval;
-  private int maxBufferedTuples;
+  private final int maxBufferedTuples;
 
   // all pending tuples are kept with an atomic reference so we can atomically switch to a
   // clean table
-  private AtomicReference<Queue<Tuple>> tupleLog = new AtomicReference<Queue<Tuple>>(new LinkedBlockingQueue<Tuple>());
+  private final AtomicReference<Queue<Tuple>> tupleLog = new AtomicReference<Queue<Tuple>>(new LinkedBlockingQueue<Tuple>());
 
   private OutputCollector outputCollector;
 

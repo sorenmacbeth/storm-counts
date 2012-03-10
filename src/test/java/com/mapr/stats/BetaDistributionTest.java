@@ -21,10 +21,6 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 
-/**
- * Created by IntelliJ IDEA. User: tdunning Date: 2/1/12 Time: 2:08 PM To change this template use
- * File | Settings | File Templates.
- */
 public class BetaDistributionTest extends DistributionTest {
   @Test
   public void testPdf1() {

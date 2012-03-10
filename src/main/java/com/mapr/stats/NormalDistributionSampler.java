@@ -17,24 +17,26 @@
 
 package com.mapr.stats;
 
-import org.uncommons.maths.random.MersenneTwisterRNG;
+import org.apache.mahout.math.jet.random.Normal;
 
 import java.util.Random;
 
 /**
- * Multi-armed bandit problem where each probability is modeled by a beta prior and data about
- * positive and negative trials.  An arm is selected by sampling from the current posterior
- * for each arm and picking the one with higher sampled probability.
+ * Returns a normal distribution whose mean is uniformly distributed on [0,1) and whose sd is as
+ * specified.
  */
-public class BetaBayesModel extends BayesianBandit {
+public class NormalDistributionSampler extends DistributionGenerator {
+  private double sd;
+  private Random gen;
 
-  public BetaBayesModel() {
-    this(2, new MersenneTwisterRNG());
+  public NormalDistributionSampler(double sd, Random gen) {
+    this.sd = sd;
+    this.gen = gen;
   }
 
-  public BetaBayesModel(int bandits, Random gen) {
-    for (int i = 0; i < bandits; i++) {
-      addModelDistribution(new BetaBinomialDistribution(1, 1, gen));
-    }
+  @Override
+  public DistributionWithMean nextDistribution() {
+    double mean = gen.nextDouble();
+    return new DistributionWithMean(new Normal(mean, sd, gen), mean);
   }
 }

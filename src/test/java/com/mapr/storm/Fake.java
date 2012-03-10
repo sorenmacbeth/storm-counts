@@ -34,10 +34,11 @@ import java.util.Set;
 /**
  * Factory methods for mocked objects including Tuples.
  */
+@SuppressWarnings("UnusedParameters")
 public class Fake {
 
-  static long[] time = {1235L};
-  static Clock adjuster = new Clock();
+  private static final long[] time = {1235L};
+  private static final Clock adjuster = new Clock();
 
   /**
    * Mocks up a tuple that has specially injected data.
@@ -73,7 +74,7 @@ public class Fake {
   }
   
   public static class FakeTuple extends Tuple {
-    Fields fields;
+    final Fields fields;
 
     public FakeTuple(List<String> fields, List<Object> values) {
       super(null, values, 0, null);
@@ -125,9 +126,9 @@ public class Fake {
   }
 
   private static class FakeOutputCollector extends OutputCollector {
-    List<AnchoredTuple> output;
-    Set<Tuple> acknowledgements;
-    private Set<Tuple> failures;
+    final List<AnchoredTuple> output;
+    final Set<Tuple> acknowledgements;
+    private final Set<Tuple> failures;
 
     private FakeOutputCollector(List<AnchoredTuple> output, Set<Tuple> acknowledgements, Set<Tuple> failures) {
       this.output = output;
@@ -166,8 +167,8 @@ public class Fake {
   }
 
   public static class AnchoredTuple {
-    private Collection<Tuple> anchors;
-    private List<Object> tuple;
+    private final Collection<Tuple> anchors;
+    private final List<Object> tuple;
 
     public AnchoredTuple(Collection<Tuple> anchors, List<Object> tuple) {
       this.anchors = anchors;

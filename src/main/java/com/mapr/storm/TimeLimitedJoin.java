@@ -46,8 +46,8 @@ public class TimeLimitedJoin implements IRichBolt {
   private final Fields joinKey;
   private OutputCollector collector;
 
-  private Queue<TimedTuple> queue = new LinkedList<TimedTuple>();
-  private Map<Key, TimedTuple> pendingByKey = Maps.newHashMap();
+  private final Queue<TimedTuple> queue = new LinkedList<TimedTuple>();
+  private final Map<Key, TimedTuple> pendingByKey = Maps.newHashMap();
 
   public TimeLimitedJoin(long expirationTime, int maxTuplesToRetain, Fields joinKey) {
     this.expirationTime = expirationTime;
@@ -119,7 +119,7 @@ public class TimeLimitedJoin implements IRichBolt {
   }
 
   private static class Key implements Iterable<Object>{
-    List<Object> values;
+    final List<Object> values;
 
     private Key(List<Object> values) {
       this.values = values;
@@ -170,7 +170,7 @@ public class TimeLimitedJoin implements IRichBolt {
   }
 
   private static class TimedTuple implements Comparable<TimedTuple> {
-    private long time;
+    private final long time;
     public Tuple tuple;
 
     public TimedTuple(long time, Tuple tuple) {

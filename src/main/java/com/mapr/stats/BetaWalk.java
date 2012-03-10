@@ -36,13 +36,13 @@ import java.util.Random;
  * symmetrical.
  */
 public class BetaWalk {
-  private Random rand = new MersenneTwisterRNG();
+  private final Random rand = new MersenneTwisterRNG();
+  private final double stepSize;
 
-  private double stepSize;
-  private BetaDistribution bd;
+  private final BetaDistribution bd;
 
-  double x;
-  double pdf = 0;
+  private double x;
+  private double pdf = 0;
 
   public BetaWalk(double alpha, double beta, double stepSize) {
     this.bd = new BetaDistribution(alpha, beta, rand);

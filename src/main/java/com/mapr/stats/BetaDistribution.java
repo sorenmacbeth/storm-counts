@@ -27,8 +27,8 @@ import java.util.Random;
  * Sample from a beta distribution.
  */
 public class BetaDistribution extends AbstractContinousDistribution {
-  private Gamma gAlpha;
-  private Gamma gBeta;
+  private final Gamma gAlpha;
+  private final Gamma gBeta;
   private double alpha, beta;
 
   public BetaDistribution(double alpha, double beta, Random random) {

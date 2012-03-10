@@ -17,11 +17,16 @@
 
 package com.mapr.stats;
 
+import com.google.common.collect.Lists;
 import org.apache.mahout.math.stats.OnlineSummarizer;
+import org.uncommons.maths.random.MersenneTwisterRNG;
 
 import java.io.FileNotFoundException;
 import java.io.PrintWriter;
+import java.lang.reflect.InvocationTargetException;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 import java.util.Random;
 
 /**
@@ -46,32 +51,50 @@ import java.util.Random;
  * chance that it is better.
  */
 public class BanditTrainer {
-  public static void main(String[] args) throws FileNotFoundException {
+  private static final int BUCKET_SIZE = 1;
+
+  public static void main(String[] args) throws FileNotFoundException, NoSuchMethodException, InvocationTargetException, InstantiationException, IllegalAccessException {
     System.out.printf("regret\n");
-    averageRegret("regret-100.tsv", new int[]{20, 50, 100, 200, 500, 1000, 2000}, 1000, 100);
-    averageRegret("regret-20.tsv", new int[]{20, 50, 100, 200, 500, 1000, 2000, 5000}, 1000, 20);
-    averageRegret("regret.tsv", new int[]{20, 50, 100, 200, 500, 1000, 2000, 5000}, 10000, 2);
-    System.out.printf("error rates\n");
-    errorRate("errors.tsv");
-    System.out.printf("commit time\n");
-    commitTime("commit.tsv", 3000, 0.1, 0.12, 2000);
-    System.out.printf("done\n");
+    Random gen = new Random();
+
+    totalRegret("regret-epsilon-normal-1.tsv", "local-epsilon-normal-1.tsv", 100000, 2, 1000, new EpsilonGreedyFactory(0.05), new NormalDistributionSampler(1, gen));
+    System.out.printf("2e\n");
+    totalRegret("regret-normal-0.1.tsv", "local-normal-0.1.tsv", 1000, 2, 1000, new GammaNormalBayesFactory(), new NormalDistributionSampler(0.1, gen));
+    System.out.printf("2\n");
+    totalRegret("regret-normal-1.tsv", "local-normal-1.tsv", 100000, 2, 1000, new GammaNormalBayesFactory(), new NormalDistributionSampler(1, gen));
+    System.out.printf("2\n");
+    totalRegret("regret-normal-10x0.1.tsv", "local-normal-10x0.1.tsv", 1000, 10, 1000, new GammaNormalBayesFactory(), new NormalDistributionSampler(0.1, gen));
+    System.out.printf("10\n");
+    totalRegret("regret-normal-100x0.1.tsv", "local-normal-100x0.1.tsv", 1000, 100, 1000, new GammaNormalBayesFactory(), new NormalDistributionSampler(.1, gen));
+    System.out.printf("100\n");
+    totalRegret("regret.tsv", "local.tsv", 1000, 2, 1000, new BetaBayesFactory(), new BinomialDistributionSampler(1, 1, gen));
+    System.out.printf("2\n");
+    totalRegret("regret-100.tsv", "local-100.tsv", 1000, 100, 1000, new BetaBayesFactory(), new BinomialDistributionSampler(1, 1, gen));
+    System.out.printf("100\n");
+    totalRegret("regret-20.tsv", "local-20.tsv", 1000, 20, 1000, new BetaBayesFactory(), new BinomialDistributionSampler(1, 1, gen));
+    System.out.printf("20\n");
+//    System.out.printf("error rates\n");
+//    errorRate("errors.tsv");
+//    System.out.printf("commit time\n");
+//    commitTime("commit.tsv", 3000, 0.1, 0.12, 2000);
+//    System.out.printf("done\n");
   }
 
   /**
-   * Records which bandit was chosen for many runs of the same scenario.  This output
-   * is kind of big an hard to digest visually.  As such, it is probably better to reduce
-   * this using a mean.  In R, this can be done like this:
+   * Records which bandit was chosen for many runs of the same scenario.  This output is kind of big
+   * an hard to digest visually.  As such, it is probably better to reduce this using a mean.  In R,
+   * this can be done like this:
    * <pre>
    *    plot(tapply(z$k, floor(z$i/10), mean), type='l')
    * </pre>
    *
-   * @param outputFile
-   * @param n
-   * @param p1
-   * @param p2
-   * @param cutoff
-   * @throws FileNotFoundException
+   * @param outputFile  Where to write results
+   * @param n           How many steps to follow
+   * @param p1          First probability of reward
+   * @param p2          Second probability of reward
+   * @param cutoff      Only keep results after this many steps
+   * @throws FileNotFoundException  If the directory holding the output directory doesn't exist.
+   * @return Average number of correct choices.
    */
   public static double commitTime(String outputFile, int n, double p1, double p2, int cutoff) throws FileNotFoundException {
     PrintWriter out = new PrintWriter(outputFile);
@@ -98,7 +121,7 @@ public class BanditTrainer {
 
           final double u = gen.nextDouble();
           boolean r = u <= p[k];
-          s.train(k, r);
+          s.train(k, r ? 1 : 0);
         }
       }
       return (double) correct / impressions;
@@ -108,13 +131,14 @@ public class BanditTrainer {
   }
 
   /**
-   * Computes error rate (the rate at which the sub-optimal choice is made as a function of the
-   * two probabilities and the number of trials.  The output report contains p1, p2,
-   * number-of-trials, total-correct, total-correct-in-last-half.
-   *
+   * Computes error rate (the rate at which the sub-optimal choice is made as a function of the two
+   * probabilities and the number of trials.  The output report contains p1, p2, number-of-trials,
+   * total-correct, total-correct-in-last-half.
+   * <p/>
    * The commitTime output is probably more interesting.
    *
-   * @param outputFile  Where to write the data.
+   * @param outputFile Where to write the data.
+   * @throws java.io.FileNotFoundException If we can't open our output
    */
   @Deprecated
   private static void errorRate(String outputFile) throws FileNotFoundException {
@@ -142,7 +166,7 @@ public class BanditTrainer {
             if (i > n / 2) {
               lateWins += r ? 1 : 0;
             }
-            s.train(k, r);
+            s.train(k, r ? 1 : 0);
           }
           out.printf("%.3f\t%.3f\t%d\t%d\t%d\n", p[0], p[1], n, wins, lateWins);
         }
@@ -153,24 +177,24 @@ public class BanditTrainer {
   }
 
   /**
-   * Computes average regret relative to perfect knowledge given uniform random probabilities.
-   * The output contains the quartiles for different numbers of trials.  The quartiles are computed
-   * by running many experiments for each specified number of trials.
-   *
+   * Computes average regret relative to perfect knowledge given uniform random probabilities. The
+   * output contains the quartiles for different numbers of trials.  The quartiles are computed by
+   * running many experiments for each specified number of trials.
+   * <p/>
    * This can be plotted pretty much directly in R
    * <pre>
    * > x=read.delim(file='~/Apache/storm-aggregator/regret.tsv')
    * > bxp(list(stats=t(as.matrix(x[,2:6])), n=rep(1000,times=8),names=x$n))
    * </pre>
    *
-   * @param outputFile  Where to put the output
-   * @param sizes
-   * @param replications
-   * @param bandits
+   * @param outputFile   Where to put the output
+   * @param sizes        The different size experiments to use
+   * @param replications Number of times to repeat the experiment
+   * @param bandits      How many bandits to simulate
    * @throws FileNotFoundException If the output file can't be opened due to a missing directory.
+   * @return Returns the average regret per trial
    */
   public static double averageRegret(String outputFile, int[] sizes, int replications, int bandits) throws FileNotFoundException {
-    double rate = 1;
 
     PrintWriter out = new PrintWriter(outputFile);
     try {
@@ -184,7 +208,7 @@ public class BanditTrainer {
         // replicate the test many times
         for (int j = 0; j < replications; j++) {
           // pick probabilities at random
-          
+
           double[] p = new double[bandits];
           for (int k = 0; k < bandits; k++) {
             p[k] = gen.nextDouble();
@@ -192,14 +216,14 @@ public class BanditTrainer {
 
           // order them to make error interpretation easier
           Arrays.sort(p);
-          BetaBayesModel s = new BetaBayesModel(bandits, rate);
+          BetaBayesModel s = new BetaBayesModel(bandits, new MersenneTwisterRNG());
           int wins = 0;
           for (int i = 0; i < n; i++) {
             int k = s.sample();
             final double u = gen.nextDouble();
             boolean r = u <= p[k];
             wins += r ? 1 : 0;
-            s.train(k, r);
+            s.train(k, r ? 1 : 0);
           }
           summary.add((double) wins / n - p[bandits - 1]);
         }
@@ -216,5 +240,111 @@ public class BanditTrainer {
     } finally {
       out.close();
     }
+  }
+
+  /**
+   * Computes average regret relative to perfect knowledge given uniform random probabilities. The
+   * output contains the quartiles for different numbers of trials.  The quartiles are computed by
+   * running many experiments for each specified number of trials.
+   * <p/>
+   * This can be plotted pretty much directly in R
+   * <pre>
+   * > x=read.delim(file='~/Apache/storm-aggregator/regret.tsv')
+   * > bxp(list(stats=t(as.matrix(x[,2:6])), n=rep(1000,times=8),names=x$n))
+   * </pre>
+   *
+   * @param cumulativeOutput   Where to write the cumulative regret results
+   * @param perTurnOutput      Where to write the per step regret results
+   * @param replications       How many times to replicate the experiment
+   * @param bandits            How many bandits to emulate
+   * @param maxSteps           Maximum number of trials to run per experiment
+   * @param modelFactory       How to construct the solver.
+   * @param refSampler         How to get reward distributions for bandits
+   * @throws FileNotFoundException If the output file can't be opened due to
+   *                         a missing directory.
+   * @return An estimate of the average final cumulative regret
+   */
+  public static double totalRegret(String cumulativeOutput, String perTurnOutput, int replications, int bandits, int maxSteps, BanditFactory modelFactory, DistributionGenerator refSampler) throws FileNotFoundException {
+    List<OnlineSummarizer> cumulativeRegret = Lists.newArrayList();
+    List<OnlineSummarizer> localRegret = Lists.newArrayList();
+    List<Integer> steps = Lists.newArrayList();
+    List<Integer> localSteps = Lists.newArrayList();
+
+    Random gen = new Random();
+
+    // for each horizon time span of interest
+    for (int j = 0; j < replications; j++) {
+      BayesianBandit s = modelFactory.createBandit(bandits, gen);
+
+      List<DistributionWithMean> refs = Lists.newArrayList();
+      for (int k = 0; k < bandits; k++) {
+        refs.add(refSampler.nextDistribution());
+      }
+
+      Collections.sort(refs);
+
+      double wins = 0;
+      int k = 0;
+      int delta = 5;
+      for (int i = 0; i < maxSteps; i++) {
+        if (i > 50 * delta) {
+          delta = bump(delta);
+        }
+        int choice = s.sample();
+        double r = refs.get(choice).nextDouble();
+
+        if ((i + 1) % delta == 0) {
+          if (cumulativeRegret.size() <= k) {
+            cumulativeRegret.add(new OnlineSummarizer());
+            steps.add(i + 1);
+          }
+          final double totalRegret = refs.get(bandits - 1).getMean() * i - wins;
+          cumulativeRegret.get(k).add(totalRegret);
+          k++;
+        }
+        if (localRegret.size() <= i / BUCKET_SIZE) {
+          localRegret.add(new OnlineSummarizer());
+          localSteps.add(i);
+        }
+        final double thisTrialRegret = refs.get(bandits - 1).getMean() - r;
+        localRegret.get(i / BUCKET_SIZE).add(thisTrialRegret);
+        wins += r;
+        s.train(choice, r);
+      }
+    }
+
+    printRegret(cumulativeOutput, cumulativeRegret, steps);
+    printRegret(perTurnOutput, localRegret, localSteps);
+    return cumulativeRegret.get(cumulativeRegret.size() - 1).getMedian();
+  }
+
+  private static void printRegret(String outputFile, List<OnlineSummarizer> cumulativeRegret, List<Integer> steps) throws FileNotFoundException {
+    PrintWriter out = new PrintWriter(outputFile);
+    try {
+      out.printf("n\tmean\tq0\tq1\tq2\tq3\tq4\n");
+      int k = 0;
+      for (OnlineSummarizer summary : cumulativeRegret) {
+        out.printf("%d\t%.3f\t", steps.get(k++), summary.getMean());
+//        for (int quartile = 0; quartile <= 4; quartile++) {
+//          out.printf("%.3f%s", summary.getQuartile(quartile), quartile < 4 ? "\t" : "\n");
+//        }
+        out.printf("\n");
+      }
+      out.flush();
+    } finally {
+      out.close();
+    }
+
+  }
+
+  private static int bump(int delta) {
+    int multiplier = 1;
+    while (delta >= 10) {
+      multiplier *= 10;
+      delta /= 10;
+    }
+    // steps each of 1,2,5 up to next level
+    delta = (int) (4 * delta - delta * delta / 3 - 1.5);
+    return delta * multiplier;
   }
 }

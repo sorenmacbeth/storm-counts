@@ -17,6 +17,7 @@
 
 package com.mapr.stats;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import org.apache.mahout.math.stats.OnlineSummarizer;
 import org.uncommons.maths.random.MersenneTwisterRNG;
@@ -28,6 +29,9 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Simulate a two-armed bandit playing against a beta-Bayesian model.
@@ -53,26 +57,125 @@ import java.util.Random;
 public class BanditTrainer {
   private static final int BUCKET_SIZE = 1;
 
-  public static void main(String[] args) throws FileNotFoundException, NoSuchMethodException, InvocationTargetException, InstantiationException, IllegalAccessException {
-    System.out.printf("regret\n");
-    Random gen = new Random();
+  public static void main(String[] args) throws FileNotFoundException, NoSuchMethodException, InvocationTargetException, InstantiationException, IllegalAccessException, InterruptedException {
+    int threads = 16;
 
-    totalRegret("regret-epsilon-normal-1.tsv", "local-epsilon-normal-1.tsv", 100000, 2, 1000, new EpsilonGreedyFactory(0.05), new NormalDistributionSampler(1, gen));
-    System.out.printf("2e\n");
-    totalRegret("regret-normal-0.1.tsv", "local-normal-0.1.tsv", 1000, 2, 1000, new GammaNormalBayesFactory(), new NormalDistributionSampler(0.1, gen));
-    System.out.printf("2\n");
-    totalRegret("regret-normal-1.tsv", "local-normal-1.tsv", 100000, 2, 1000, new GammaNormalBayesFactory(), new NormalDistributionSampler(1, gen));
-    System.out.printf("2\n");
-    totalRegret("regret-normal-10x0.1.tsv", "local-normal-10x0.1.tsv", 1000, 10, 1000, new GammaNormalBayesFactory(), new NormalDistributionSampler(0.1, gen));
-    System.out.printf("10\n");
-    totalRegret("regret-normal-100x0.1.tsv", "local-normal-100x0.1.tsv", 1000, 100, 1000, new GammaNormalBayesFactory(), new NormalDistributionSampler(.1, gen));
-    System.out.printf("100\n");
-    totalRegret("regret.tsv", "local.tsv", 1000, 2, 1000, new BetaBayesFactory(), new BinomialDistributionSampler(1, 1, gen));
-    System.out.printf("2\n");
-    totalRegret("regret-100.tsv", "local-100.tsv", 1000, 100, 1000, new BetaBayesFactory(), new BinomialDistributionSampler(1, 1, gen));
-    System.out.printf("100\n");
-    totalRegret("regret-20.tsv", "local-20.tsv", 1000, 20, 1000, new BetaBayesFactory(), new BinomialDistributionSampler(1, 1, gen));
-    System.out.printf("20\n");
+    if (args.length > 0) {
+      threads = Integer.parseInt(args[0]);
+    }
+
+    System.out.printf("regret\n");
+    ExecutorService ex = Executors.newFixedThreadPool(threads);
+
+    List<Callable<Integer>> tasks = ImmutableList.of(
+      new Callable<Integer>() {
+        @Override
+        public Integer call() {
+          try {
+            totalRegret("regret-normal-0.1.tsv", "local-normal-0.1.tsv", 1000, 2, 10000, new GammaNormalBayesFactory(), new NormalDistributionSampler(0.1, new Random()));
+            System.out.printf("2\n");
+          } catch (FileNotFoundException e) {
+            e.printStackTrace();
+          }
+          return null;
+        }
+      },
+      new Callable<Integer>() {
+        @Override
+        public Integer call() {
+          try {
+            totalRegret("regret-epsilon-normal-1.tsv", "local-epsilon-normal-1.tsv", 1000, 2, 10000, new EpsilonGreedyFactory(0.05), new NormalDistributionSampler(1, new Random()));
+            System.out.printf("2e\n");
+          } catch (FileNotFoundException e) {
+            e.printStackTrace();
+          }
+          return null;
+        }
+      },
+
+
+      new Callable<Integer>() {
+        @Override
+        public Integer call() {
+          try {
+            totalRegret("regret-normal-1.tsv", "local-normal-1.tsv", 300, 2, 200000, new GammaNormalBayesFactory(), new NormalDistributionSampler(1, new Random()));
+            System.out.printf("normal 1\n");
+          } catch (FileNotFoundException e) {
+            e.printStackTrace();
+          }
+          return null;
+        }
+      },
+
+      new Callable<Integer>() {
+        @Override
+        public Integer call() {
+          try {
+            totalRegret("regret-normal-10x0.1.tsv", "local-normal-10x0.1.tsv", 1000, 10, 1000, new GammaNormalBayesFactory(), new NormalDistributionSampler(0.1, new Random()));
+            System.out.printf("10\n");
+          } catch (FileNotFoundException e) {
+            e.printStackTrace();
+          }
+          return null;
+        }
+      },
+
+      new Callable<Integer>() {
+        @Override
+        public Integer call() {
+          try {
+            totalRegret("regret-normal-100x0.1.tsv", "local-normal-100x0.1.tsv", 1000, 100, 1000, new GammaNormalBayesFactory(), new NormalDistributionSampler(.1, new Random()));
+            System.out.printf("100\n");
+          } catch (FileNotFoundException e) {
+            e.printStackTrace();
+          }
+          return null;
+        }
+      },
+
+      new Callable<Integer>() {
+        @Override
+        public Integer call() {
+          try {
+            totalRegret("regret.tsv", "local.tsv", 1000, 2, 1000, new BetaBayesFactory(), new BinomialDistributionSampler(1, 1, new Random()));
+            System.out.printf("2\n");
+          } catch (FileNotFoundException e) {
+            e.printStackTrace();
+          }
+          return null;
+        }
+      },
+
+      new Callable<Integer>() {
+        @Override
+        public Integer call() {
+          try {
+            totalRegret("regret-100.tsv", "local-100.tsv", 1000, 100, 1000, new BetaBayesFactory(), new BinomialDistributionSampler(1, 1, new Random()));
+            System.out.printf("100\n");
+          } catch (FileNotFoundException e) {
+            e.printStackTrace();
+          }
+          return null;
+        }
+      },
+
+      new Callable<Integer>() {
+        @Override
+        public Integer call() {
+          try {
+            totalRegret("regret-20.tsv", "local-20.tsv", 1000, 20, 1000, new BetaBayesFactory(), new BinomialDistributionSampler(1, 1, new Random()));
+            System.out.printf("20\n");
+          } catch (FileNotFoundException e) {
+            e.printStackTrace();
+          }
+          return null;
+        }
+      }
+    );
+    ex.invokeAll(tasks);
+    ex.shutdown();
+    System.out.printf("All done");
+
 //    System.out.printf("error rates\n");
 //    errorRate("errors.tsv");
 //    System.out.printf("commit time\n");
@@ -285,7 +388,8 @@ public class BanditTrainer {
 
       double wins = 0;
       int k = 0;
-      int delta = 5;
+      int delta = 1;
+      double totalRegret = 0;
       for (int i = 0; i < maxSteps; i++) {
         if (i > 50 * delta) {
           delta = bump(delta);
@@ -293,12 +397,12 @@ public class BanditTrainer {
         int choice = s.sample();
         double r = refs.get(choice).nextDouble();
 
+        totalRegret += refs.get(bandits - 1).getMean() - refs.get(choice).getMean();
         if ((i + 1) % delta == 0) {
           if (cumulativeRegret.size() <= k) {
             cumulativeRegret.add(new OnlineSummarizer());
             steps.add(i + 1);
           }
-          final double totalRegret = refs.get(bandits - 1).getMean() * i - wins;
           cumulativeRegret.get(k).add(totalRegret);
           k++;
         }
@@ -306,7 +410,7 @@ public class BanditTrainer {
           localRegret.add(new OnlineSummarizer());
           localSteps.add(i);
         }
-        final double thisTrialRegret = refs.get(bandits - 1).getMean() - r;
+        double thisTrialRegret = refs.get(bandits - 1).getMean() - refs.get(choice).getMean();
         localRegret.get(i / BUCKET_SIZE).add(thisTrialRegret);
         wins += r;
         s.train(choice, r);
@@ -321,14 +425,13 @@ public class BanditTrainer {
   private static void printRegret(String outputFile, List<OnlineSummarizer> cumulativeRegret, List<Integer> steps) throws FileNotFoundException {
     PrintWriter out = new PrintWriter(outputFile);
     try {
-      out.printf("n\tmean\tq0\tq1\tq2\tq3\tq4\n");
+      out.printf("n\tmean\n");
       int k = 0;
       for (OnlineSummarizer summary : cumulativeRegret) {
-        out.printf("%d\t%.3f\t", steps.get(k++), summary.getMean());
+        out.printf("%d\t%.4f\n", steps.get(k++), summary.getMean());
 //        for (int quartile = 0; quartile <= 4; quartile++) {
 //          out.printf("%.3f%s", summary.getQuartile(quartile), quartile < 4 ? "\t" : "\n");
 //        }
-        out.printf("\n");
       }
       out.flush();
     } finally {

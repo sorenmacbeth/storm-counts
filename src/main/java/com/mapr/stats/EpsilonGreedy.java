@@ -72,11 +72,11 @@ public class EpsilonGreedy extends BayesianBandit {
    * Apply feedback to the bandit we chose.
    *
    * @param bandit  Which bandit got the impression
-   * @param success Did it pay off?
+   * @param reward Did it pay off?
    */
   @Override
-  public void train(int bandit, double success) {
-    summaries.get(bandit).add(success);
+  public void train(int bandit, double reward) {
+    summaries.get(bandit).add(reward);
   }
 
   @Override

@@ -59,10 +59,10 @@ public abstract class BayesianBandit {
   /**
    * Apply feedback to the bandit we chose.
    * @param bandit      Which bandit got the impression
-   * @param success     Did it pay off?
+   * @param reward     Did it pay off?
    */
-  public void train(int bandit, double success) {
-    bd.get(bandit).add(success);
+  public void train(int bandit, double reward) {
+    bd.get(bandit).add(reward);
   }
 
   public boolean addModelDistribution(AbstractBayesianDistribution distribution) {
